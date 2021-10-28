@@ -1,0 +1,56 @@
+#------------
+# Required
+#------------
+
+# Provide your tenant ID (Required)
+tenant_id="YOUR_TENANT_ID"
+
+# Azure Client ID (Required)
+client_id = "AZURE-APP-ID"
+
+# Azure Client secret (Required)
+client_secret = "AZURE-APP-PASSWORD"
+
+# Azure account subscription ID (Required)
+subscription_id = "YOUR-AZURE-SUBSCRIPTION-ID"
+
+#------------
+# Optional
+#------------
+
+# To overwrite the default (Optional)
+location            = "eastus"
+resource_group_name = "prima-test"
+
+vault_vm_name       = "vault-instance" # must be lower case
+consul_vm_name      = "consul-server" # must be lower case
+
+domain              = "YOUR_DOMAIN_NAME" # Purchased domain
+subdomain           = "YOUR_SUBDOMAIN_NAME"
+
+vm_admin_username   = "azureuser"
+
+environment         = "test"
+namespace           = "testing"
+
+
+consul_tokens       = {
+  encrypt_key = "VtLneVJIrITyVayEgCrmju13Q1VzP8AnAAxpKSyWYII=",
+  acl_master_token = "4118ff19-59c1-dde9-b61d-e049e62275b1",
+  acl_agent_token = "edce6281-bdf3-6417-4332-bcde9d71835f",
+  acl_default_token = "d2884566-ee08-8f4c-3bcb-d741f88c5a08"
+}
+
+vnet_address_space  = "10.0.0.0/16"
+
+# Requires at least one
+public_ip_allowlist = [
+    "" # Your Public IP
+  ]
+
+
+tags = {
+environment = "Learning" # In case your using tags
+owner = "YOUR_NAME"
+project = "PROJECT_NAME"
+}

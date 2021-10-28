@@ -1,0 +1,420 @@
+# Imported existing resource group
+# resource "azurerm_resource_group" "RG" {
+#   name     = "prima-test"
+#   location = "eastus"
+# }
+
+# Locate the existing custom/golden image
+data "azurerm_image" "vault" {
+  name                = "VaultImage"
+  resource_group_name = var.resource_group_name
+}
+
+data "azurerm_image" "consul" {
+  name                = "ConsulImage"
+  resource_group_name = var.resource_group_name
+}
+
+# ---------------------
+# Key Vault
+# ---------------------
+resource "random_id" "keyvault" {
+  byte_length = 4
+}
+
+data "azurerm_client_config" "current" {
+}
+
+resource "azurerm_key_vault" "vault" {
+  name                        = "ultra-new-item"# join("-vault-", [var.environment, random_id.keyvault.hex]) # "luiskeyvault"  
+  location                    = var.location
+  resource_group_name         = var.resource_group_name
+  enabled_for_deployment      = true
+  enabled_for_disk_encryption = true
+  tenant_id                   = var.tenant_id
+
+  sku_name = "standard"
+
+  tags = {
+    environment = var.environment
+  }
+
+  access_policy {
+    tenant_id = var.tenant_id
+
+    object_id = data.azurerm_client_config.current.object_id
+
+    key_permissions = [
+      "get",
+      "list",
+      "create",
+      "delete",
+      "update",
+      "wrapKey",
+      "unwrapKey",
+    ]
+  }
+
+  network_acls {
+    default_action = "Allow"
+    bypass         = "AzureServices"
+  }
+}
+
+resource "azurerm_key_vault_key" "generated" {
+  name         = var.key_name
+  key_vault_id = azurerm_key_vault.vault.id
+  key_type     = "RSA"
+  key_size     = 2048
+
+  key_opts = [
+    "decrypt",
+    "encrypt",
+    "sign",
+    "unwrapKey",
+    "verify",
+    "wrapKey",
+  ]
+}
+
+
+
+# ---------------------
+# Landing Zone (network)
+# ---------------------
+module "landing_zone" {
+  source = "../azure-landing-zone/landing-zone/modules/landing_zone"
+
+  resource_group_name = var.resource_group_name
+  location            = var.location
+
+  namespace           = var.namespace
+
+  vnet_address_space  = var.vnet_address_space
+
+  public_ip_allowlist = var.public_ip_allowlist
+
+  subnet_address_spaces = [
+    {
+      name          = var.namespace
+      address_space = cidrsubnet(var.vnet_address_space, 8, 0) # Bastion
+    }
+    ,
+    {
+      address_space = cidrsubnet(var.vnet_address_space, 8, 1) # vault VM
+    },
+    {
+      address_space = cidrsubnet(var.vnet_address_space, 8, 2) # consul VM
+    }
+  ]
+
+  bastion = {
+    username   = var.vm_admin_username
+    public_key = module.ssh_keys.ssh_public_key
+  }
+
+  tags = var.tags
+}
+
+# ---------------------
+# SSH Keys
+# ---------------------
+module "ssh_keys" {
+  source = "../azure-landing-zone/landing-zone/modules/ssh"
+
+  # path_to_pem = "<Pathtofile>" # example: "./tfe_rsa.pem"
+  # path_to_pub = "<Pathtofile>" # example: "./tfe_rsa.pub"
+}
+
+# ---------------------
+# Postgres DB
+# ---------------------
+module "postgres-DB" {
+  source = "../azure-landing-zone/landing-zone/modules/postgresql"
+
+  resource_group_name = var.resource_group_name
+  location            = var.location
+  subnet_id           = module.landing_zone.networking.subnet_ids[0]
+  public_ip_allowlist = var.public_ip_allowlist
+
+  common_tags = var.tags
+}
+
+# ---------------------
+# Storage Account
+# ---------------------
+module "storage-account" {
+  source = "../azure-landing-zone/landing-zone/modules/storage_account"
+
+  resource_group_name = var.resource_group_name
+  location            = var.location
+  namespace           = var.namespace
+  subnet_id           = module.landing_zone.networking.subnet_ids[0]
+  public_ip_allowlist = var.public_ip_allowlist
+
+  common_tags = var.tags
+}
+
+# ---------------------
+# Vault VM network
+# ---------------------
+resource "azurerm_public_ip" "vault" {
+  name                    = "ip-${random_id.keyvault.hex}-vault"
+  location                = var.location
+  resource_group_name     = var.resource_group_name
+  allocation_method       = "Dynamic"
+  idle_timeout_in_minutes = 30
+
+  tags = var.tags
+}
+
+resource "azurerm_network_interface" "vault" {
+  name                = "nic-${random_id.keyvault.hex}-vault"
+  location            = var.location
+  resource_group_name = var.resource_group_name
+
+  ip_configuration {
+    name                          = "nic-${random_id.keyvault.hex}-vault"
+    subnet_id                     = module.landing_zone.networking.subnet_ids[1]
+    # private_ip_address_allocation = "Static"
+    # private_ip_address            = "10.0.0.5"
+    private_ip_address_allocation = "dynamic"
+    public_ip_address_id          = azurerm_public_ip.vault.id
+  }
+
+  tags = var.tags
+}
+
+
+# data "template_file" "setup" {
+#   template = file("${path.module}/setup.tpl")
+
+#   vars = {
+#     resource_group_name = var.resource_group_name
+#     vm_name             = var.vm_name
+#     vault_download_url  = var.vault_download_url
+#     tenant_id           = var.tenant_id
+#     subscription_id     = var.subscription_id
+#     client_id           = var.client_id
+#     client_secret       = var.client_secret
+#     vault_name          = azurerm_key_vault.vault.name
+#     key_name            = var.key_name
+#   }
+# }
+
+# ---------------------
+# Create Vault VM
+# ---------------------
+resource "azurerm_linux_virtual_machine" "vault" {
+  name                = var.vault_vm_name
+  location            = var.location
+  resource_group_name = var.resource_group_name
+  size                = "Standard_F2"
+  admin_username      = var.vm_admin_username
+
+  network_interface_ids = [
+    azurerm_network_interface.vault.id,
+  ]
+
+  identity {
+    type = "SystemAssigned"
+  }
+
+  # custom_data         = base64encode(data.template_file.setup.rendered)
+
+  source_image_id     = data.azurerm_image.vault.id
+
+  admin_ssh_key {
+    username   = var.vm_admin_username
+    public_key = module.ssh_keys.ssh_public_key
+  }
+
+  os_disk {
+    caching              = "ReadWrite"
+    storage_account_type = "Standard_LRS"
+  }
+
+  # source_image_reference {
+  #   publisher = "Canonical"
+  #   offer     = "UbuntuServer"
+  #   sku       = "16.04-LTS"
+  #   version   = "latest"
+  # }
+
+  boot_diagnostics {
+      storage_account_uri = module.storage-account.object_storage_config.blob
+  }
+
+  # Activate Vault Service
+  provisioner "remote-exec" {
+
+    inline = [
+      "sudo systemctl start vault",
+    ]
+
+    connection {
+      host        = azurerm_linux_virtual_machine.vault.public_ip_address #azurerm_public_ip.bastion.ip_address
+      type        = "ssh"
+      user        = var.vm_admin_username
+      private_key = module.ssh_keys.ssh_private_key # file("tfe_rsa.pem")
+      agent       = false
+    }
+  }
+
+  tags = var.tags
+}
+
+
+# ---------------------
+# Consul VM network
+# ---------------------
+resource "azurerm_public_ip" "consul" {
+  name                    = "ip-${random_id.keyvault.hex}-consul"
+  location                = var.location
+  resource_group_name     = var.resource_group_name
+  allocation_method       = "Dynamic"
+  idle_timeout_in_minutes = 30
+
+  tags = var.tags
+}
+
+resource "azurerm_network_interface" "consul" {
+  name                = "nic-${random_id.keyvault.hex}-consul"
+  location            = var.location
+  resource_group_name = var.resource_group_name
+
+  ip_configuration {
+    name                          = "nic-${random_id.keyvault.hex}-consul"
+    subnet_id                     = module.landing_zone.networking.subnet_ids[2]
+    # private_ip_address_allocation = "Static"
+    # private_ip_address            = "10.0.0.5"
+    private_ip_address_allocation = "dynamic"
+    public_ip_address_id          = azurerm_public_ip.consul.id
+  }
+
+  tags = var.tags
+}
+
+# ---------------------
+# Create Consul VM
+# ---------------------
+resource "azurerm_linux_virtual_machine" "consul" {
+  name                = var.consul_vm_name
+  location            = var.location
+  resource_group_name = var.resource_group_name
+  size                = "Standard_F2"
+  admin_username      = var.vm_admin_username
+
+  network_interface_ids = [
+    azurerm_network_interface.consul.id,
+  ]
+
+  identity {
+    type = "SystemAssigned"
+  }
+
+  # custom_data         = base64encode(data.template_file.setup.rendered)
+
+  source_image_id     = data.azurerm_image.consul.id
+
+  admin_ssh_key {
+    username   = var.vm_admin_username
+    public_key = module.ssh_keys.ssh_public_key
+  }
+
+  os_disk {
+    caching              = "ReadWrite"
+    storage_account_type = "Standard_LRS"
+  }
+
+  # source_image_reference {
+  #   publisher = "Canonical"
+  #   offer     = "UbuntuServer"
+  #   sku       = "16.04-LTS"
+  #   version   = "latest"
+  # }
+
+  # boot_diagnostics {
+  #     storage_account_uri = module.storage-account.object_storage_config.blob
+  # }
+
+  # # Activate Consul Service
+  # provisioner "remote-exec" {
+
+  #   inline = [
+  #     "sudo systemctl start vault",
+  #   ]
+
+  #   connection {
+  #     host        = azurerm_linux_virtual_machine.example.public_ip_address #azurerm_public_ip.bastion.ip_address
+  #     type        = "ssh"
+  #     user        = var.vm_admin_username
+  #     private_key = module.ssh_keys.ssh_private_key # file("tfe_rsa.pem")
+  #     agent       = false
+  #   }
+  # }
+
+  tags = var.tags
+}
+
+# ---------------------
+# Outputs
+# ---------------------
+
+output "key_vault_name" {
+  value = azurerm_key_vault.vault.name
+}
+
+output "postgres_pass" {
+  value = {
+    postgres_pass = module.postgres-DB.postgres_config.password
+  }
+}
+
+
+# Vault
+data "azurerm_public_ip" "vault" {
+ name                = azurerm_public_ip.vault.name
+ #resource_group_name = azurerm_virtual_machine.example.resource_group_name
+ resource_group_name = azurerm_linux_virtual_machine.vault.resource_group_name
+}
+
+output "ip-vault" {
+ value = data.azurerm_public_ip.vault.ip_address
+}
+
+output "ssh-addr-vault" {
+ value = <<SSH
+
+   Connect to your virtual machine for vault via SSH:
+
+   $ ssh ${var.vm_admin_username}@${data.azurerm_public_ip.vault.ip_address}
+
+
+SSH
+
+}
+
+
+# Consul
+data "azurerm_public_ip" "consul" {
+ name                = azurerm_public_ip.consul.name
+ #resource_group_name = azurerm_virtual_machine.example.resource_group_name
+ resource_group_name = azurerm_linux_virtual_machine.consul.resource_group_name
+}
+
+output "ip-consul" {
+ value = data.azurerm_public_ip.consul.ip_address
+}
+
+output "ssh-addr-consul" {
+ value = <<SSH
+
+   Connect to your virtual machine via SSH:
+
+   $ ssh ${var.vm_admin_username}@${data.azurerm_public_ip.consul.ip_address}
+
+
+SSH
+
+}
