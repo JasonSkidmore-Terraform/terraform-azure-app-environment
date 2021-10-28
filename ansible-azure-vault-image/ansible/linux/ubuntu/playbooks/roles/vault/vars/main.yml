@@ -1,0 +1,7 @@
+vault:
+  # version: 1.6.0+ent
+  # checksum: 4f804b7a4e6783bafc3793760d7fc043b9e673c11aa48eb2f1061b88c616e2b5
+  version: 1.6.0
+  checksum: 83048e2d1ebfea212fead42e474e947c3a3bccc5056a5158ed33f530f8325e39
+  deploy_dir: /usr/bin
+  config_dir: /etc/vault.d

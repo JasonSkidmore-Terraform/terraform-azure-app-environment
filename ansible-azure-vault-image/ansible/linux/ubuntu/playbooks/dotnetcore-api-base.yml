@@ -1,0 +1,7 @@
+---
+- hosts: dotnetcore-api-base
+  become: true
+  user: ubuntu
+  roles:
+    - dotnetcore
+    - { role: mongos, port: 27420 }

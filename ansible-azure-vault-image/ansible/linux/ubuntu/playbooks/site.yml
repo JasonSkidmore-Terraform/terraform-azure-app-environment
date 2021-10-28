@@ -1,0 +1,23 @@
+---
+#file: site.yml
+- include: app-dynamics-java.yml
+- include: consul.yml
+- include: logstash-indexer.yml
+- include: mule.yml
+- include: rabbitmq.yml
+- include: terraform-tower.yml
+- include: concourseci-build-java.yml
+- include: concourseci-deploy.yml
+- include: teamcity-agent.yml
+- include: vault.yml
+- include: local-dev.yml
+- include: ec2-docker.yml
+- include: fly.yml
+- include: datadog-java-client-base.yml
+- include: mule-cli.yml
+- include: talend.yml
+- include: nomad.yml
+- include: nomad-agent.yml
+- include: nomad-cli.yml
+- include: datadog-rds.yml
+- include: jasper.yml

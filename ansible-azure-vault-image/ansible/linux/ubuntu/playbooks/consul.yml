@@ -1,0 +1,13 @@
+---
+- hosts: consul
+  become: true
+  user: ubuntu
+  vars:
+    service: consul
+    datadog_process_checks:
+      - { name: consul, search_string: ['consul'] }
+  roles:
+    - common
+    - { role: filebeat, version: 6.4.0 }
+    - { role: datadog-agent }
+    - { role: consul, cli: false }

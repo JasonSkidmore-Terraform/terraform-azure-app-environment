@@ -1,0 +1,8 @@
+consul:
+  # version: 1.8.4+ent
+  version: 1.8.4
+  deploy_dir: /usr/bin
+  config_dir: /etc/consul.d
+  app_dir: /opt/consul
+
+config_file: consul

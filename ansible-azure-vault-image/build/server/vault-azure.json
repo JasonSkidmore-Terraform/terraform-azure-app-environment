@@ -1,0 +1,58 @@
+{
+  "variables": {
+    "client_id": "{{env `ARM_CLIENT_ID`}}",
+    "client_secret": "{{env `ARM_CLIENT_SECRET`}}",
+    "tenant_id" : "{{env `ARM_TENANT_ID`}}",
+    "subscription_id" : "{{env `ARM_SUBSCRIPTION_ID`}}",
+    "resource_group" : "{{env `ARM_RESOURCE_GROUP`}}",
+    "image_name" : "VaultImage-{{timestamp}}",
+    "enable_az_cli_auth" : "{{env `ENABLE_AZ_CLI_AUTH`}}"
+  },
+  "builders": [{
+    "type": "azure-arm",
+
+    "use_azure_cli_auth": "{{user `enable_az_cli_auth`}}",
+    "client_id": "{{user `client_id`}}",
+    "client_secret": "{{user `client_secret`}}",
+    "tenant_id": "{{user `tenant_id`}}",
+    "subscription_id": "{{user `subscription_id`}}",
+
+    "managed_image_resource_group_name": "{{user `resource_group`}}",
+    "managed_image_name": "{{user `image_name`}}",
+
+    "os_type": "Linux",
+    "image_publisher": "Canonical",
+    "image_offer": "UbuntuServer",
+    "image_sku": "18.04-LTS",
+
+    "azure_tags": {
+        "dept": "DevOps",
+        "task": "Image deployment"
+    },
+
+    "build_resource_group_name": "{{user `resource_group`}}",
+    "vm_size": "Standard_DS2_v2"
+  }],
+  "provisioners": [
+   
+    {
+      "type": "shell",
+      "scripts": [
+        "build/scripts/apt_upgrade_18.sh",
+        "build/scripts/install_ansible_18.sh"
+      ]
+    },
+    {
+      "type": "ansible-local",
+      "playbook_file": "ansible/linux/ubuntu/playbooks/vault.yml",
+      "inventory_groups": "vault",
+      "playbook_dir": "ansible/linux/ubuntu/playbooks/"
+    },
+    {
+      "type": "shell",
+      "scripts": [
+        "build/scripts/install_az_cli.sh"
+      ]
+    }
+  ]
+}

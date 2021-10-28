@@ -1,0 +1,76 @@
+{
+  "variables": {
+    "aws_access_key": "{{env `AWS_ACCESS_KEY`}}",
+    "aws_secret_key": "{{env `AWS_SECRET_KEY`}}",
+    "packer_id" : "packer-consul",
+    "release" : "flag"
+
+  },
+  "builders": [
+    {
+      "vpc_id": "vpc-eab46591",
+      "subnet_id": "subnet-fccd9ba1",
+      "type": "amazon-ebs",
+      "access_key": "{{user `aws_access_key`}}",
+      "secret_key": "{{user `aws_secret_key`}}",
+      "region": "us-east-1",
+      "source_ami_filter": {
+        "filters": {
+          "virtualization-type": "hvm",
+          "name": "ubuntu/images/hvm-ssd/ubuntu-bionic-18.04-amd64-server-*",
+          "root-device-type": "ebs"
+        },
+        "owners": ["099720109477"],
+        "most_recent": true
+      },
+      "instance_type": "t2.medium",
+      "ssh_username": "ubuntu",
+      "communicator": "ssh",
+      "ssh_pty": true,
+      "ami_name" : "consul-{{ timestamp }}",
+      "ami_description": "Consul server image",
+      "ami_virtualization_type": "hvm",
+      "ami_users": [
+        "658620301396",
+        "398155684978",
+        "948881759270",
+        "217267089143",
+        "501520144152"
+      ],
+      "ami_regions": [
+        "us-west-2"
+      ],
+      "tags": {
+        "os": "ubuntu18",
+        "storage": "ebs",
+        "image": "consul",
+        "version": "1.6.1",
+        "manageby": "packer",
+        "timestamp": "{{ timestamp }}",
+        "Name": "{{user `packer_id`}}",
+        "Release": "{{user `release` }}"
+      }
+    }
+  ],
+  "provisioners": [
+    {
+      "type": "shell",
+      "scripts": [
+        "build/scripts/apt_upgrade.sh",
+        "build/scripts/install_ansible.sh"
+      ]
+    },
+    {
+      "type": "ansible-local",
+      "playbook_file": "ansible/linux/ubuntu/playbooks/consul.yml",
+      "inventory_groups": "consul",
+      "playbook_dir": "ansible/linux/ubuntu/playbooks/"
+    },
+    {
+      "type": "shell",
+      "scripts": [
+        "build/scripts/ec2_bundle_vol.sh"
+      ]
+    }
+  ]
+}

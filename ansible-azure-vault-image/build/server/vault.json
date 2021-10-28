@@ -1,0 +1,75 @@
+{
+  "variables": {
+    "aws_access_key": "{{env `AWS_ACCESS_KEY`}}",
+    "aws_secret_key": "{{env `AWS_SECRET_KEY`}}",
+    "packer_id" : "packer-aml2",
+    "release" : "flag"
+
+  },
+  "builders": [
+    {
+      "vpc_id": "vpc-eab46591",
+      "subnet_id": "subnet-f50f5dda",
+      "type": "amazon-ebs",
+      "access_key": "{{user `aws_access_key`}}",
+      "secret_key": "{{user `aws_secret_key`}}",
+      "region": "us-east-1",
+      "source_ami_filter": {
+        "filters": {
+          "virtualization-type": "hvm",
+          "name": "ubuntu/images/hvm-ssd/ubuntu-bionic-18.04-amd64-server-*",
+          "root-device-type": "ebs"
+        },
+        "owners": ["099720109477"],
+        "most_recent": true
+      },
+      "instance_type": "t2.medium",
+      "ssh_username": "ubuntu",
+      "communicator": "ssh",
+      "ssh_pty": true,
+      "ami_name" : "vault-{{timestamp}}",
+      "ami_description": "vault server image",
+      "ami_virtualization_type": "hvm",
+      "ami_users": [
+        "658620301396",
+        "398155684978",
+        "948881759270",
+        "217267089143",
+        "501520144152"
+      ],
+      "ami_regions" : [
+        "us-west-2"
+      ],
+      "tags": {
+        "os": "ubuntu18",
+        "storage": "ebs",
+        "image": "vault",
+        "manageby": "packer",
+        "timestamp": "{{ timestamp }}",
+        "Name": "{{user `packer_id`}}",
+        "Release": "{{user `release` }}"
+      }
+    }
+  ],
+  "provisioners": [
+    {
+      "type": "shell",
+      "scripts": [
+        "build/scripts/apt_upgrade_18.sh",
+        "build/scripts/install_ansible_18.sh"
+      ]
+    },
+    {
+      "type": "ansible-local",
+      "playbook_file": "ansible/linux/ubuntu/playbooks/vault.yml",
+      "inventory_groups": "vault",
+      "playbook_dir": "ansible/linux/ubuntu/playbooks/"
+    },
+    {
+      "type": "shell",
+      "scripts": [
+        "build/scripts/ec2_bundle_vol_18.sh"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,23 @@
+---
+- name: Provision Python
+  hosts: all
+  gather_facts: no
+  tasks:
+    - name: Boostrap python
+      raw: test -e /usr/bin/python || (apt-get -y update && apt-get install -y python-minimal)
+
+
+- name: Provision SSL Root
+  hosts: all
+  roles:
+    - ssl
+
+- name: Container cleanup
+  hosts: all
+  gather_facts: no
+  tasks:
+    - name: Remove python
+      raw: apt-get purge -y python-minimal && apt-get autoremove -y
+
+    - name: Remove apt lists
+      raw: rm -rf /var/lib/apt/lists/*

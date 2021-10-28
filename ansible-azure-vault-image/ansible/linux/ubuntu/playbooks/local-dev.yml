@@ -1,0 +1,9 @@
+---
+- hosts: local-dev
+  become: true
+  user: ubuntu
+  roles:
+    - common
+    - docker-compose
+    - { role: docker, bin: true, version: docker-ce_18.06.0~ce~3-0~ubuntu_amd64.deb}
+    - { role: consul, cli: true}
